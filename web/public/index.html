@@ -1,0 +1,417 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Data bench: Rust vs Python vs JavaScript</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⏱️</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link crossorigin="anonymous" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #E9EDF0;
+    --surface: #F7F9FA;
+    --ink: #18212B;
+    --muted: #5A6672;
+    --rule: #C7CFD6;
+    --ok: #2F7A4A;
+    --bad: #B3261E;
+    --rust: #A8471F;
+    --node: #4E8A3A;
+    --pandas: #5446A3;
+    --python: #2D6AA6;
+    --polars: #1B7F86;
+    --browser: #B88A0B;
+    --display: "Bricolage Grotesque", "Helvetica Neue", Arial, sans-serif;
+    --body: "Instrument Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+    color-scheme: light dark;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #141A20; --surface: #1C242C; --ink: #E6EBEF; --muted: #98A4AF; --rule: #33404B;
+      --ok: #6BC28A; --bad: #F08C84;
+      --rust: #E07A4F; --node: #7DBA62; --pandas: #9A8CE8; --python: #6AA6E0; --polars: #4FC3C8; --browser: #E2B53A;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--ink); }
+  body {
+    font: 400 1rem/1.55 var(--body);
+    padding: env(safe-area-inset-top, 0) 0 env(safe-area-inset-bottom, 0);
+    font-variant-numeric: tabular-nums;
+  }
+  main { max-width: 960px; margin: 0 auto; padding: 3rem 1.25rem 4rem; }
+
+  h1 {
+    font: 800 clamp(2.4rem, 7vw, 4.4rem)/0.95 var(--display);
+    letter-spacing: -0.03em;
+    margin: 0 0 1rem;
+    max-width: 14ch;
+  }
+  .lede { color: var(--muted); max-width: 60ch; margin: 0 0 2.25rem; font-size: 1.075rem; }
+  h2 { font: 700 1.5rem/1.2 var(--display); letter-spacing: -0.01em; margin: 0 0 0.25rem; }
+  h3 { font: 600 1.05rem/1.3 var(--body); margin: 0; }
+
+  /* Controls */
+  .controls {
+    display: grid; gap: 1.25rem 2rem;
+    grid-template-columns: auto 1fr auto; align-items: end;
+    padding: 1.25rem 0 1.5rem; border-top: 2px solid var(--ink);
+  }
+  .field-label { display: block; font-weight: 600; font-size: 0.9rem; margin-bottom: 0.45rem; }
+  .seg { display: inline-flex; border: 1px solid var(--rule); border-radius: 8px; overflow: hidden; background: var(--surface); }
+  .seg button {
+    font: 500 0.95rem var(--body); color: var(--ink); background: none; border: 0;
+    padding: 0.5rem 0.8rem; cursor: pointer; border-right: 1px solid var(--rule);
+  }
+  .seg button:last-child { border-right: 0; }
+  .seg button[aria-pressed="true"] { background: var(--ink); color: var(--bg); }
+  .engines { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+  .chip {
+    display: inline-flex; align-items: center; gap: 0.45rem; cursor: pointer;
+    padding: 0.4rem 0.7rem; border: 1px solid var(--rule); border-radius: 999px;
+    background: var(--surface); font-size: 0.9rem; user-select: none;
+  }
+  .chip input { accent-color: var(--c); margin: 0; }
+  .chip .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--c); }
+  .chip:has(input:not(:checked)) { opacity: 0.55; }
+  .run {
+    font: 700 1.05rem var(--display); color: var(--bg); background: var(--ink);
+    border: 0; border-radius: 10px; padding: 0.8rem 1.4rem; cursor: pointer; white-space: nowrap;
+  }
+  .run:disabled { opacity: 0.5; cursor: progress; }
+  button:focus-visible, input:focus-visible { outline: 3px solid var(--python); outline-offset: 2px; }
+  .note { color: var(--muted); font-size: 0.875rem; margin: 0.25rem 0 0; }
+
+  /* Race (overall) */
+  .race { margin: 1rem 0 3rem; }
+  .race-head { display: flex; justify-content: space-between; align-items: baseline; gap: 1rem; flex-wrap: wrap; margin-bottom: 1rem; }
+  .lane { display: grid; grid-template-columns: 13rem 1fr; gap: 1rem; align-items: center; padding: 0.9rem 0; border-bottom: 1px solid var(--rule); }
+  .lane:first-of-type { border-top: 1px solid var(--rule); }
+  .lane-name { font-weight: 600; line-height: 1.25; }
+  .lane-name small { display: block; font-weight: 400; color: var(--muted); font-size: 0.8rem; }
+  .track { position: relative; height: 2.6rem; }
+  .bar {
+    position: absolute; inset: 0 auto 0 0; width: 0; min-width: 3px;
+    background: var(--c); border-radius: 0 6px 6px 0;
+    transition: width 700ms cubic-bezier(.2,.7,.2,1);
+  }
+  .lane-time {
+    position: absolute; top: 50%; transform: translateY(-50%); left: calc(var(--w, 0%) + 0.6rem);
+    font: 700 1.35rem var(--display); white-space: nowrap;
+    transition: left 700ms cubic-bezier(.2,.7,.2,1);
+  }
+  .lane-time .x { font: 500 0.85rem var(--body); color: var(--muted); margin-left: 0.4rem; }
+  .lane.inside .lane-time { left: auto; right: calc(100% - var(--w) + 0.6rem); color: #fff; }
+  .lane.inside .lane-time .x { color: rgba(255,255,255,.85); }
+  .status { color: var(--muted); font-size: 0.95rem; }
+  .status.err { color: var(--bad); }
+  .running .track::after {
+    content: ""; position: absolute; inset: 0.9rem auto 0.9rem 0; width: 30%;
+    background: repeating-linear-gradient(90deg, var(--c) 0 6px, transparent 6px 12px);
+    animation: crawl 1.2s linear infinite; opacity: 0.6;
+  }
+  @keyframes crawl { from { transform: translateX(0); } to { transform: translateX(230%); } }
+
+  /* Tasks */
+  .tasks { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); gap: 2.25rem 2.5rem; }
+  .task p.desc { color: var(--muted); margin: 0.15rem 0 0.75rem; font-size: 0.92rem; }
+  .row { display: grid; grid-template-columns: 9.5rem 1fr 5.5rem; gap: 0.6rem; align-items: center; font-size: 0.9rem; padding: 0.2rem 0; }
+  .row .t { height: 0.75rem; background: color-mix(in srgb, var(--rule) 45%, transparent); border-radius: 3px; overflow: hidden; }
+  .row .t i { display: block; height: 100%; background: var(--c); width: 0; transition: width 600ms ease-out; }
+  .row .ms { text-align: right; }
+  .check { margin-top: 0.6rem; font-size: 0.85rem; }
+  .check.ok { color: var(--ok); }
+  .check.bad { color: var(--bad); }
+
+  .empty { padding: 2rem 0; color: var(--muted); }
+  .about { margin-top: 3.5rem; padding-top: 1.5rem; border-top: 2px solid var(--ink); max-width: 68ch; }
+  .about p { margin: 0.5rem 0 0.9rem; }
+  .about dl { display: grid; grid-template-columns: max-content 1fr; gap: 0.35rem 1.25rem; margin: 0; }
+  .about dt { font-weight: 600; }
+  .about dd { margin: 0; color: var(--muted); }
+
+  @media (max-width: 720px) {
+    .controls { grid-template-columns: 1fr; }
+    .lane { grid-template-columns: 1fr; gap: 0.4rem; }
+    .row { grid-template-columns: 7rem 1fr 4.5rem; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::after { transition: none !important; animation: none !important; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <h1>Same data, six engines</h1>
+  <p class="lede">Each engine builds the same seeded dataset of sales rows, then filters, groups, joins, searches, sorts and summarises it. Results are checked against each other, so you can see who is fastest and that they all got the same answer.</p>
+
+  <section class="controls" aria-label="Benchmark settings">
+    <div>
+      <span class="field-label" id="rows-label">Rows</span>
+      <div class="seg" role="group" aria-labelledby="rows-label" id="rows"></div>
+    </div>
+    <div>
+      <span class="field-label">Engines</span>
+      <div class="engines" id="engines"></div>
+    </div>
+    <div>
+      <button class="run" id="run">Run benchmark</button>
+    </div>
+  </section>
+
+  <section class="race" aria-live="polite">
+    <div class="race-head">
+      <h2>Total time</h2>
+      <div class="seg" role="group" aria-label="Bar scale" id="scale">
+        <button data-scale="linear" aria-pressed="true">Linear</button>
+        <button data-scale="log" aria-pressed="false">Log</button>
+      </div>
+    </div>
+    <div id="lanes"></div>
+    <p class="note">Every engine uses all the CPU cores it can, and engines run one after another so they never compete for them. Lower is better.</p>
+  </section>
+
+  <section>
+    <h2 style="margin-bottom:1.25rem">By task</h2>
+    <div class="tasks" id="tasks"></div>
+  </section>
+
+  <section class="about">
+    <h2>How it works</h2>
+    <p>Every row has a category (20), a region (5), a value between 0 and 1000, a quantity from 1 to 10, a customer, and a product code such as SKU-0042. A separate table gives each of 100,000 customers a discount tier. Everything comes from the mulberry32 generator, implemented identically in each language, so every engine sees the exact same data.</p>
+    <dl>
+      <dt>Rust</dt><dd>Release build, columnar <code>Vec</code>s, spread across cores with rayon.</dd>
+      <dt>JavaScript</dt><dd>Typed arrays in shared memory, one worker thread per core, on Node.js and in your own browser.</dd>
+      <dt>Python + pandas</dt><dd>Vectorised NumPy generation and pandas DataFrame operations. Runs on one core, because pandas has no built-in way to use more.</dd>
+      <dt>Python + Polars</dt><dd>Everything in Polars, including generating the data with its own expression engine on Arrow memory. Polars spreads work across cores by itself.</dd>
+      <dt>Python (pure)</dt><dd>Plain loops, no libraries. One process per core, because the GIL stops threads from running Python in parallel.</dd>
+    </dl>
+    <p class="note">Multi-core runs include the cost of splitting the work and combining results, such as merging sorted chunks. Timings exclude network transfer. Browser results depend on your device.</p>
+  </section>
+</main>
+
+<script src="/bench.js"></script>
+<script>
+const ENGINES = [
+  { id: "rust",    name: "Rust",                  color: "var(--rust)",    url: "/api/rust/bench" },
+  { id: "node",    name: "JavaScript",            color: "var(--node)",    url: "/api/node/bench" },
+  { id: "pandas",  name: "Python + pandas",       color: "var(--pandas)",  url: "/api/python/bench?engine=pandas" },
+  { id: "polars",  name: "Python + Polars",       color: "var(--polars)",  url: "/api/python/bench?engine=polars" },
+  { id: "python",  name: "Python (pure)",         color: "var(--python)",  url: "/api/python/bench?engine=pure" },
+  { id: "browser", name: "JavaScript in browser", color: "var(--browser)", local: true },
+];
+const TASKS = [
+  { id: "generate",              name: "Generate rows",                desc: "Build the dataset, plus a 100,000-row customer table and a product-code text column." },
+  { id: "filter",                name: "Filter",                       desc: "Rows with value over 500 and quantity 5 or more; count and revenue." },
+  { id: "group_category",        name: "Group by category",            desc: "Average value for each of 20 categories." },
+  { id: "group_region_category", name: "Group by region and category", desc: "Revenue for each of 100 region and category pairs." },
+  { id: "join",                  name: "Join customers",               desc: "Look up each row's customer in the customer table, then total revenue after tier discounts." },
+  { id: "group_customer",        name: "Group by customer",            desc: "Revenue for each of up to 100,000 customers." },
+  { id: "text",                  name: "Text search",                  desc: "Find product codes containing \"42\" and total the value for each code." },
+  { id: "sort",                  name: "Sort",                         desc: "Order every row by value, highest first." },
+  { id: "stats",                 name: "Summary statistics",           desc: "Mean, standard deviation, median and 95th percentile." },
+];
+const ROW_OPTIONS = [100000, 500000, 1000000, 2000000];
+
+const state = {
+  rows: 1000000,
+  scale: "linear",
+  enabled: new Set(ENGINES.map(e => e.id)),
+  results: {},   // id -> { status: waiting|running|done|error, data, error }
+  running: false,
+};
+
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const fmtRows = (n) => n >= 1e6 ? `${n / 1e6}M` : `${n / 1e3}k`;
+function fmtMs(ms) {
+  if (ms >= 1000) return `${(ms / 1000).toFixed(ms >= 10000 ? 1 : 2)} s`;
+  if (ms >= 100) return `${ms.toFixed(0)} ms`;
+  if (ms >= 10) return `${ms.toFixed(1)} ms`;
+  return `${ms.toFixed(2)} ms`;
+}
+function widthPct(v, min, max) {
+  if (!(max > 0)) return 0;
+  if (state.scale === "log") {
+    const lo = Math.log10(Math.max(min, 0.01)) - 0.3, hi = Math.log10(max);
+    return Math.max(1, ((Math.log10(Math.max(v, 0.01)) - lo) / (hi - lo)) * 100);
+  }
+  return Math.max(0.5, (v / max) * 100);
+}
+
+/* ---------- controls ---------- */
+function renderControls() {
+  $("#rows").innerHTML = ROW_OPTIONS.map(n =>
+    `<button data-rows="${n}" aria-pressed="${n === state.rows}">${fmtRows(n)}</button>`).join("");
+  $("#engines").innerHTML = ENGINES.map(e => `
+    <label class="chip" style="--c:${e.color}">
+      <input type="checkbox" value="${e.id}" ${state.enabled.has(e.id) ? "checked" : ""}>
+      <span class="dot" aria-hidden="true"></span>${esc(e.name)}
+    </label>`).join("");
+}
+$("#rows").addEventListener("click", (e) => {
+  const b = e.target.closest("button"); if (!b || state.running) return;
+  state.rows = +b.dataset.rows; renderControls();
+});
+$("#engines").addEventListener("change", (e) => {
+  e.target.checked ? state.enabled.add(e.target.value) : state.enabled.delete(e.target.value);
+});
+$("#scale").addEventListener("click", (e) => {
+  const b = e.target.closest("button"); if (!b) return;
+  state.scale = b.dataset.scale;
+  $("#scale").querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", x === b));
+  render();
+});
+
+/* ---------- running ---------- */
+let browserPool = null;
+async function runInBrowser(rows) {
+  if (window.crossOriginIsolated) {
+    // One worker per core, sharing memory; created once and reused.
+    if (!browserPool) {
+      const cores = navigator.hardwareConcurrency || 4;
+      browserPool = Bench.createPool(Array.from({ length: cores }, () => {
+        const w = new Worker("/worker.js");
+        return { post: (m) => w.postMessage(m), listen: (fn) => w.addEventListener("message", (e) => fn(e.data)) };
+      }));
+    }
+    const out = await Bench.run(rows, browserPool);
+    return { ...out, language: "JavaScript", runtime: "Your browser" };
+  }
+  // Fallback: no shared memory on this page, so run on one core in a single worker.
+  return new Promise((resolve, reject) => {
+    const w = new Worker("/worker.js");
+    w.onmessage = (e) => {
+      if (e.data.type !== "done") return;
+      w.terminate();
+      e.data.ok
+        ? resolve({ ...e.data.data, language: "JavaScript", runtime: "Your browser (one core: page not cross-origin isolated)" })
+        : reject(new Error(e.data.error));
+    };
+    w.onerror = (e) => { w.terminate(); reject(new Error(e.message || "The browser worker failed to start.")); };
+    w.postMessage({ type: "runLocal", rows });
+  });
+}
+async function runServer(engine, rows) {
+  const url = engine.url + (engine.url.includes("?") ? "&" : "?") + "rows=" + rows;
+  const res = await fetch(url, { cache: "no-store" });
+  let body = null;
+  try { body = await res.json(); } catch { /* non-JSON error page */ }
+  if (!res.ok) {
+    const msg = body && (body.error || body.detail);
+    throw new Error(msg || `The ${engine.name} service returned ${res.status}. Check that its container is running.`);
+  }
+  return body;
+}
+$("#run").addEventListener("click", async () => {
+  const list = ENGINES.filter(e => state.enabled.has(e.id));
+  if (!list.length) { alert("Pick at least one engine to run."); return; }
+  state.running = true; $("#run").disabled = true; $("#run").textContent = "Running…";
+  state.results = Object.fromEntries(list.map(e => [e.id, { status: "waiting" }]));
+  render();
+  for (const engine of list) {
+    state.results[engine.id] = { status: "running" }; render();
+    try {
+      const data = engine.local ? await runInBrowser(state.rows) : await runServer(engine, state.rows);
+      state.results[engine.id] = { status: "done", data };
+    } catch (err) {
+      state.results[engine.id] = { status: "error", error: err.message };
+    }
+    render();
+  }
+  state.running = false; $("#run").disabled = false; $("#run").textContent = "Run again";
+});
+
+/* ---------- correctness check ---------- */
+function sameValue(a, b) {
+  if (typeof a !== "number" || typeof b !== "number") return a === b;
+  if (Number.isInteger(a) && Number.isInteger(b) && Math.abs(a) > 1e3) return a === b || Math.abs(a - b) / Math.abs(a) < 1e-9;
+  const scale = Math.max(Math.abs(a), Math.abs(b), 1e-12);
+  return Math.abs(a - b) / scale < 1e-6;  // float sums differ slightly between pairwise and sequential summation
+}
+function checkTask(taskId, done) {
+  if (done.length < 2) return null;
+  const pick = (e) => e.data.tasks.find(t => t.id === taskId)?.result || {};
+  const ref = pick(done[0]);
+  const off = [];
+  for (const e of done.slice(1)) {
+    const r = pick(e);
+    const fields = Object.keys(ref).filter(k => !sameValue(ref[k], r[k]));
+    if (fields.length) off.push(`${e.name} differs on ${fields.join(", ")}`);
+  }
+  return off.length
+    ? { ok: false, text: `Mismatch: ${off.join("; ")}.` }
+    : { ok: true, text: `All ${done.length} engines got the same result.` };
+}
+
+/* ---------- render ---------- */
+function render() {
+  const active = ENGINES.filter(e => state.results[e.id]);
+  if (!active.length) {
+    $("#lanes").innerHTML = `<p class="empty">Choose a row count and press Run benchmark. Pure Python on 2M rows can take around a minute.</p>`;
+    $("#tasks").innerHTML = "";
+    return;
+  }
+  const done = active.filter(e => state.results[e.id].status === "done").map(e => ({ ...e, data: state.results[e.id].data }));
+
+  // Overall lanes
+  const totals = done.map(e => e.data.total_ms);
+  const max = Math.max(...totals, 0), min = Math.min(...totals, Infinity);
+  $("#lanes").innerHTML = active.map(e => {
+    const r = state.results[e.id];
+    let inner = "";
+    if (r.status === "done") {
+      const w = widthPct(r.data.total_ms, min, max);
+      const ratio = r.data.total_ms / min;
+      const x = done.length > 1 ? (ratio < 1.005 ? "fastest" : `${ratio < 10 ? ratio.toFixed(1) : Math.round(ratio)}× slower`) : "";
+      inner = `<div class="bar" data-w="${w}"></div><span class="lane-time">${fmtMs(r.data.total_ms)}<span class="x">${x}</span></span>`;
+    } else if (r.status === "error") {
+      inner = `<span class="status err">${esc(r.error)}</span>`;
+    } else {
+      inner = `<span class="status">${r.status === "running" ? "Running" : "Waiting"}</span>`;
+    }
+    const cores = r.status === "done" && r.data.cores ? `, ${r.data.cores} ${r.data.cores === 1 ? "core" : "cores"}` : "";
+    const sub = r.status === "done" ? esc(r.data.runtime + cores) : (e.local ? "Runs on this device" : "");
+    return `<div class="lane ${r.status}" style="--c:${e.color}">
+      <div class="lane-name">${esc(e.name)}<small>${sub}</small></div>
+      <div class="track">${inner}</div></div>`;
+  }).join("");
+
+  // Grow bars after insertion so the width transition plays; put labels inside long bars
+  requestAnimationFrame(() => {
+    document.querySelectorAll("#lanes .lane").forEach(lane => {
+      const bar = lane.querySelector(".bar"); if (!bar) return;
+      const w = +bar.dataset.w;
+      bar.style.width = w + "%";
+      lane.style.setProperty("--w", w + "%");
+      lane.classList.toggle("inside", w > 72);
+    });
+    document.querySelectorAll("#tasks i[data-w]").forEach(i => { i.style.width = i.dataset.w + "%"; });
+  });
+
+  // Per-task
+  $("#tasks").innerHTML = TASKS.map(t => {
+    const times = done.map(e => e.data.tasks.find(x => x.id === t.id)?.ms ?? 0);
+    const tmax = Math.max(...times, 0), tmin = Math.min(...times.filter(v => v > 0), Infinity);
+    const rows = done.map((e, i) => `
+      <div class="row" style="--c:${e.color}">
+        <span>${esc(e.name)}</span>
+        <span class="t"><i data-w="${widthPct(times[i], tmin, tmax)}"></i></span>
+        <span class="ms">${fmtMs(times[i])}</span>
+      </div>`).join("");
+    const chk = checkTask(t.id, done);
+    return `<article class="task">
+      <h3>${t.name}</h3><p class="desc">${t.desc}</p>
+      ${rows || `<p class="status">Waiting for results</p>`}
+      ${chk ? `<p class="check ${chk.ok ? "ok" : "bad"}">${chk.ok ? "✓" : "✗"} ${esc(chk.text)}</p>` : ""}
+    </article>`;
+  }).join("");
+}
+
+renderControls();
+render();
+</script>
+</body>
+</html>

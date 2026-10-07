@@ -1,0 +1,31 @@
+# Data analytics benchmark: Rust vs Python vs JavaScript
+# Start:  docker compose up -d --build
+# Open:   http://127.0.0.1:8090 (put your reverse proxy in front for bench.zawaung.site)
+
+x-engine: &engine
+  restart: unless-stopped
+  mem_limit: 2g       # no CPU limit: every engine may use all cores
+  environment:
+    MAX_ROWS: "2000000"
+
+services:
+  web:
+    build:
+      context: .
+      dockerfile: web/Dockerfile
+    ports:
+      - "127.0.0.1:8090:80"   # only reachable through your reverse proxy
+    depends_on: [rust, python, node]
+    restart: unless-stopped
+
+  rust:
+    <<: *engine
+    build: ./rust
+
+  python:
+    <<: *engine
+    build: ./python
+
+  node:
+    <<: *engine
+    build: ./node
